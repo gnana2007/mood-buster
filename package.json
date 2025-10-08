@@ -9,8 +9,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint .",
-    "postinstall": "npm install --no-optional"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
