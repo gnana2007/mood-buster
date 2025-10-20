@@ -2,6 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ----------------- Animations ----------------- */
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
@@ -11,7 +12,26 @@
   animation: fade-in 0.3s ease-out;
 }
 
-/* Custom scrollbar */
+@keyframes blob-move {
+  0% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+
+.blob {
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  background: linear-gradient(135deg, #f472b6, #8b5cf6);
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.6;
+  animation: blob-move 10s infinite alternate ease-in-out;
+  z-index: -1;
+}
+
+/* ----------------- Custom Scrollbar ----------------- */
 ::-webkit-scrollbar {
   width: 6px;
 }
@@ -30,24 +50,42 @@
   background: #94a3b8;
 }
 
-/* Smooth transitions for all interactive elements */
+/* ----------------- Smooth Transitions ----------------- */
 * {
   transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
 }
 
-/* Glass morphism effect */
+/* ----------------- Glass Morphism ----------------- */
 .glass {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 1rem;
 }
 
-/* Gradient text */
+/* ----------------- Gradient Text ----------------- */
 .gradient-text {
   background: linear-gradient(45deg, #3B82F6, #8B5CF6);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+/* ----------------- Video ----------------- */
+video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 1rem;
+}
+
+/* ----------------- Responsive ----------------- */
+@media (max-width: 1024px) {
+  .blob {
+    width: 200px;
+    height: 200px;
+    filter: blur(80px);
+  }
 }

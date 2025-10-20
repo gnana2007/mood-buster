@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Brain } from 'lucide-react';
+import { Brain, Camera, FileText, LayoutDashboard } from 'lucide-react';
 import * as faceapi from 'face-api.js';
 import ReactMarkdown from 'react-markdown';
 
@@ -34,13 +34,12 @@ function App() {
     try {
       await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
       await faceapi.nets.faceExpressionNet.loadFromUri('/models');
-      console.log('✅ Face-API models loaded');
     } catch (err) {
-      console.error('❌ Error loading models:', err);
+      console.error('Error loading models:', err);
     }
   };
 
-  /* -------------------- Emotion handling -------------------- */
+  /* -------------------- Emotion Handling -------------------- */
   const handleEmotionDetected = async (emotion, confidence, source) => {
     const emotionData = {
       id: Date.now().toString(),
@@ -54,267 +53,208 @@ function App() {
     setCurrentEmotion(emotion);
 
     await fetchGeminiResponse(emotion);
-    setShowRecommendations(true); // show popup after fetching suggestions
+    setShowRecommendations(true);
   };
 
   const fetchGeminiResponse = async (emotion) => {
     try {
       setLoadingAI(true);
       setGeminiAnswer('Fetching suggestions...');
-      const res = await getGeminiSuggestions(null, emotion); // image null, emotion string
+      const res = await getGeminiSuggestions(null, emotion);
       setGeminiAnswer(res.suggestions || 'No suggestions found.');
-    } catch (err) {
-      console.error('Gemini fetch error:', err);
+    } catch {
       setGeminiAnswer('Could not fetch suggestions. Try again later.');
     } finally {
       setLoadingAI(false);
     }
   };
 
-  /* -------------------- Camera & Detection -------------------- */
+  /* -------------------- Camera -------------------- */
   const startCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480 },
-      });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.muted = true;
         await videoRef.current.play();
       }
       setCameraActive(true);
     } catch (err) {
-      console.error('Camera error:', err);
       setCameraError(err.message);
     }
   };
 
   const stopCamera = () => {
     const stream = videoRef.current?.srcObject;
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      videoRef.current.srcObject = null;
-    }
+    if (stream) stream.getTracks().forEach(t => t.stop());
     setCameraActive(false);
   };
 
+  useEffect(() => () => stopCamera(), []);
+
   const captureAndAnalyze = async () => {
-    if (!videoRef.current) return;
-    if (!modelsLoaded) {
-      alert('Models are still loading — please wait.');
-      return;
-    }
+    if (!videoRef.current || !modelsLoaded) return;
 
     try {
-      const options = new faceapi.TinyFaceDetectorOptions({
-        inputSize: 224,
-        scoreThreshold: 0.5,
-      });
-
-      const detection = await faceapi
-        .detectSingleFace(videoRef.current, options)
-        .withFaceExpressions();
-
-      if (detection && detection.expressions) {
-        const sorted = Object.entries(detection.expressions)
-          .sort((a, b) => b[1] - a[1]);
+      const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 });
+      const detection = await faceapi.detectSingleFace(videoRef.current, options).withFaceExpressions();
+      if (detection?.expressions) {
+        const sorted = Object.entries(detection.expressions).sort((a, b) => b[1] - a[1]);
         const [emotion, confidence] = sorted[0];
         handleEmotionDetected(emotion, Math.round(confidence * 100), 'camera');
-      } else {
-        alert('No face detected. Make sure your face is visible and well-lit.');
-      }
+      } else alert('No face detected. Make sure your face is visible and well-lit.');
     } catch (err) {
       console.error('Detection error:', err);
-      alert('An error occurred while analyzing the image.');
+      alert('Error analyzing image.');
     }
   };
 
-  // stop camera when component unmounts
-  useEffect(() => {
-    return () => {
-      try {
-        stopCamera();
-      } catch (e) {
-        /* ignore during unmount */
-      }
-    };
-  }, []);
-
   /* -------------------- Recommendations Popup -------------------- */
- const Recommendations = ({ emotion, geminiAnswer, loading, onClose }) => {
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl max-w-lg w-full max-h-[80vh] p-6 relative shadow-lg flex flex-col">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-          aria-label="Close recommendations"
-        >
-          ×
-        </button>
-        <h3 className="text-xl font-semibold mb-4 capitalize">
-          Suggestions for feeling {emotion}
-        </h3>
-
-        {loading ? (
-          <p>Loading suggestions...</p>
-        ) : (
-          <div className="prose max-w-none whitespace-pre-wrap overflow-y-auto flex-grow">
-            <ReactMarkdown>
-              {geminiAnswer}
-            </ReactMarkdown>
+  const Recommendations = ({ emotion, geminiAnswer, loading, onClose }) => (
+    <div className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-50 p-4">
+      <div className="glass p-6 rounded-2xl w-full max-w-lg relative shadow-xl border">
+        <button onClick={onClose} className="absolute top-3 right-4 text-gray-600 hover:text-gray-800">✕</button>
+        <h3 className="text-xl font-semibold mb-3 capitalize text-gray-900">Suggestions for feeling {emotion}</h3>
+        {loading ? <p>Loading suggestions...</p> : (
+          <div className="prose max-h-[50vh] overflow-y-auto">
+            <ReactMarkdown>{geminiAnswer}</ReactMarkdown>
           </div>
         )}
       </div>
     </div>
   );
-};
 
+  /* -------------------- Sidebar Tabs with Icons -------------------- */
+  const tabs = [
+    { key: 'camera', label: 'Face Detection', icon: <Camera className="w-5 h-5 mr-2" /> },
+    { key: 'text', label: 'Text / Photo', icon: <FileText className="w-5 h-5 mr-2" /> },
+    { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5 mr-2" /> },
+  ];
 
   /* -------------------- UI -------------------- */
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-gray-200/50 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center">
-                <Brain className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">AI Emotion Detector</h1>
-                <p className="text-sm text-gray-500">Your Personal Wellness Companion</p>
-              </div>
-            </div>
+    <div className="relative min-h-screen w-full overflow-hidden bg-gradient-to-br from-pink-100 via-blue-50 to-purple-100">
+      {/* Animated background blobs */}
+      <div className="blob top-[-50px] left-[-50px]"></div>
+      <div className="blob bottom-[-50px] right-[-50px]"></div>
 
-            {currentEmotion && (
-              <div className="flex items-center space-x-2 bg-white rounded-full px-4 py-2 shadow-sm border">
-                <span className="font-medium capitalize">{currentEmotion}</span>
-              </div>
-            )}
+      {/* Header */}
+      <header className="bg-white/60 backdrop-blur-lg border-b border-white/20 sticky top-0 z-40">
+        <div className="w-full flex items-center justify-between h-16 px-6">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-gradient-to-r from-indigo-500 to-pink-500 rounded-xl shadow-md">
+              <Brain className="text-white w-6 h-6" />
+            </div>
+            <div>
+              <h1 className="gradient-text text-xl font-bold tracking-tight">AI Emotion Detector</h1>
+              <p className="text-sm text-gray-500">Your Personal Wellness Companion</p>
+            </div>
           </div>
+
+          {currentEmotion && (
+            <div className="px-4 py-2 bg-white/70 rounded-full shadow-sm border border-gray-200">
+              <span className="capitalize text-gray-800">{currentEmotion}</span>
+            </div>
+          )}
         </div>
       </header>
 
       {/* Main */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Sidebar Nav */}
-          <div className="lg:col-span-1">
-            <nav className="bg-white rounded-2xl shadow-sm border border-gray-200/50 p-6 sticky top-24">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Detection Mode</h2>
-              <div className="space-y-2">
-                <button
-                  onClick={() => setActiveTab('camera')}
-                  className={`w-full px-4 py-3 rounded-xl ${
-                    activeTab === 'camera'
-                      ? 'bg-blue-50 border-blue-200 border'
-                      : 'hover:bg-gray-50'
-                  }`}
-                >
-                  Face Detection
-                </button>
-
-                <button
-                  onClick={() => setActiveTab('text')}
-                  className={`w-full px-4 py-3 rounded-xl ${
-                    activeTab === 'text'
-                      ? 'bg-green-50 border-green-200 border'
-                      : 'hover:bg-gray-50'
-                  }`}
-                >
-                  Text / Photo
-                </button>
-
-                <button
-                  onClick={() => setActiveTab('dashboard')}
-                  className={`w-full px-4 py-3 rounded-xl ${
-                    activeTab === 'dashboard'
-                      ? 'bg-purple-50 border-purple-200 border'
-                      : 'hover:bg-gray-50'
-                  }`}
-                >
-                  Dashboard
-                </button>
-              </div>
-            </nav>
+      <main className="w-full px-4 py-8 grid grid-cols-1 lg:grid-cols-4 gap-8">
+        {/* Sidebar */}
+        <nav className="glass border border-white/30 rounded-2xl shadow-lg p-6 sticky top-24">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Detection Mode</h2>
+          <div className="space-y-2">
+            {tabs.map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex items-center w-full py-3 px-3 rounded-xl transition-all ${
+                  activeTab === tab.key
+                    ? 'bg-gradient-to-r from-indigo-100 to-pink-100 border border-pink-300 shadow-inner'
+                    : 'hover:bg-gray-50 border border-transparent'
+                }`}
+              >
+                {tab.icon} {tab.label}
+              </button>
+            ))}
           </div>
+        </nav>
 
-          {/* Main Content */}
-          <div className="lg:col-span-3">
-            <div className="space-y-8">
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200/50 p-6">
-                {activeTab === 'camera' && (
-                  <div className="flex flex-col items-center space-y-4">
-                    {cameraError && <p className="text-red-500">{cameraError}</p>}
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      width={400}
-                      height={300}
-                      className="border rounded-lg"
-                    />
+        {/* Content */}
+        <section className="lg:col-span-3 flex flex-col items-center w-full max-w-4xl mx-auto animate-fade-in">
+          {/* Camera Tab */}
+          {activeTab === 'camera' && (
+            <div className="flex flex-col items-center w-full">
+              {cameraError && <p className="text-red-500 mb-2">{cameraError}</p>}
 
-                    <div className="space-x-4">
-                      {!cameraActive ? (
-                        <button
-                          onClick={startCamera}
-                          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-                        >
-                          Start Camera
-                        </button>
-                      ) : (
-                        <>
-                          <button
-                            onClick={stopCamera}
-                            className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
-                          >
-                            Stop Camera
-                          </button>
-                          <button
-                            onClick={captureAndAnalyze}
-                            disabled={!modelsLoaded}
-                            className={`px-4 py-2 text-white rounded-lg ${
-                              modelsLoaded
-                                ? 'bg-green-500 hover:bg-green-600'
-                                : 'bg-gray-300 cursor-not-allowed'
-                            }`}
-                          >
-                            {modelsLoaded ? 'Capture & Analyze' : 'Loading models...'}
-                          </button>
-                        </>
-                      )}
-                    </div>
+              {/* Detection frame */}
+              <div className="relative w-full rounded-2xl shadow-lg overflow-hidden border border-white/30 glass">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  className="w-full aspect-video object-cover"
+                />
+                {currentEmotion && (
+                  <div className="absolute top-2 left-2 bg-white/60 backdrop-blur-md px-3 py-1 rounded-full border border-white/30 text-gray-800 font-semibold capitalize">
+                    {currentEmotion}
                   </div>
                 )}
-
-                {activeTab === 'text' && (
-                  <TextAnalyzer
-                    onEmotionDetected={handleEmotionDetected}
-                    geminiAnswer={geminiAnswer}
-                  />
-                )}
-
-                {activeTab === 'dashboard' && (
-                  <Dashboard emotionHistory={emotionHistory} />
-                )}
               </div>
 
-              {/* Recommendations Popup */}
-              {showRecommendations && currentEmotion && (
-                <Recommendations
-                  emotion={currentEmotion}
-                  geminiAnswer={geminiAnswer}
-                  loading={loadingAI}
-                  onClose={() => setShowRecommendations(false)}
-                />
-              )}
+              {/* Buttons */}
+              <div className="mt-4 flex flex-wrap justify-center gap-4 w-full">
+                {!cameraActive ? (
+                  <button
+                    onClick={startCamera}
+                    className="px-6 py-2 bg-indigo-500 text-white rounded-lg shadow-md hover:bg-indigo-600 w-40"
+                  >
+                    Start Camera
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={stopCamera}
+                      className="px-6 py-2 bg-red-500 text-white rounded-lg shadow-md hover:bg-red-600 w-40"
+                    >
+                      Stop Camera
+                    </button>
+                    <button
+                      onClick={captureAndAnalyze}
+                      disabled={!modelsLoaded}
+                      className={`px-6 py-2 rounded-lg shadow-md text-white w-40 ${
+                        modelsLoaded ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-300 cursor-not-allowed'
+                      }`}
+                    >
+                      {modelsLoaded ? 'Capture & Analyze' : 'Loading...'}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-        </div>
-      </div>
+          )}
+
+          {/* Text / Photo Tab */}
+          {activeTab === 'text' && (
+            <TextAnalyzer onEmotionDetected={handleEmotionDetected} geminiAnswer={geminiAnswer} />
+          )}
+
+          {/* Dashboard Tab */}
+          {activeTab === 'dashboard' && (
+            <Dashboard emotionHistory={emotionHistory} />
+          )}
+        </section>
+
+        {/* Recommendations */}
+        {showRecommendations && currentEmotion && (
+          <Recommendations
+            emotion={currentEmotion}
+            geminiAnswer={geminiAnswer}
+            loading={loadingAI}
+            onClose={() => setShowRecommendations(false)}
+          />
+        )}
+      </main>
     </div>
   );
 }
